@@ -105,7 +105,7 @@ class FastLagrangePerceptualAttack(nn.Module):
         self.loss = MarginLoss(kappa=kappa)
 
     def _get_features(self, inputs: torch.Tensor) -> torch.Tensor:
-        return self.lpips_model.features(inputs)
+        return normalize_flatten_features(self.lpips_model.features(inputs))
 
     def _get_features_logits(
         self, inputs: torch.Tensor

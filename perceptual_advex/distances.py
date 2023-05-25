@@ -226,14 +226,10 @@ def normalize_flatten_features(
 
     normalized_features: List[torch.Tensor] = []
     for feature_layer in features:
-        # norm_factor = torch.sqrt(
-        #     torch.sum(feature_layer ** 2, dim=1, keepdim=True)) + eps
         normalized_features.append(feature_layer.view(feature_layer.size()[0], -1))
 
     return torch.cat(normalized_features, dim=1)
-        # (feature_layer / (norm_factor *
-        #                   np.sqrt(feature_layer.size()[2] *
-        #                           feature_layer.size()[3])))
+
 
 def gaussian(window_size, sigma):
     gauss = torch.Tensor([exp(-(x - window_size // 2) ** 2 / float(2 * sigma ** 2)) for x in range(window_size)])
