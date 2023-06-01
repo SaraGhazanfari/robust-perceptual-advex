@@ -1,11 +1,11 @@
-
+from static_vars import StaticVars
 import torch
 import random
 import copy
 from torch import nn
+from static_vars import StaticVars
+from .distances import LPIPSDistance
 
-from .distances import OriginalLPIPSDistance
-my_device = torch.device('cuda:0') if torch.cuda.is_available() else torch.device('mps')
 
 def evaluate_against_attacks(model, attacks, val_loader, parallel=1,
                              writer=None, iteration=None, num_batches=None):
@@ -14,11 +14,15 @@ def evaluate_against_attacks(model, attacks, val_loader, parallel=1,
     optionally writing it to a tensorboardX summary writer.
     """
 
-    model_lpips_model: nn.Module = OriginalLPIPSDistance()
-    alexnet_lpips_model: nn.Module = OriginalLPIPSDistance()
+    model_lpips_model: nn.Module = LPIPSDistance(model)
+    alexnet_lpips_model: nn.Module = LPIPSDistance()
 
-    model_lpips_model.to(my_device)
-    alexnet_lpips_model.to(my_device)
+    model_lpips_model.to(StaticVars.DEVICE)
+    alexnet_lpips_model.to(StaticVars.DEVICE)
+
+    device_ids = list(range(parallel))
+    model_lpips_model = nn.DataParallel(model_lpips_model, device_ids)
+    alexnet_lpips_model = nn.DataParallel(alexnet_lpips_model, device_ids)
 
     model_state_dict = copy.deepcopy(model.state_dict())
 
@@ -36,9 +40,8 @@ def evaluate_against_attacks(model, attacks, val_loader, parallel=1,
             if num_batches is not None and batch_index >= num_batches:
                 break
 
-
-            inputs = inputs.to(my_device)
-            labels = labels.to(my_device)
+            inputs = inputs.to(StaticVars.DEVICE)
+            labels = labels.to(StaticVars.DEVICE)
 
             adv_inputs = attack(inputs, labels)
 
@@ -68,12 +71,12 @@ def evaluate_against_attacks(model, attacks, val_loader, parallel=1,
 
             if success.sum() > 0:
                 successful_model_lpips.extend(model_lpips_model(
-                    model_lpips_model.features(inputs_success),
-                    model_lpips_model.features(adv_inputs_success),
+                    inputs_success,
+                    adv_inputs_success,
                 ).detach())
                 successful_alexnet_lpips.extend(alexnet_lpips_model(
-                    alexnet_lpips_model.features(inputs_success),
-                    alexnet_lpips_model.features(adv_inputs_success),
+                    inputs_success,
+                    adv_inputs_success,
                 ).detach())
         print_cols = [f'ATTACK {attack_name}']
 

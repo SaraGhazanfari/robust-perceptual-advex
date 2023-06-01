@@ -1,20 +1,15 @@
-
 import torch
 import csv
 import argparse
 import copy
 from typing import List
 
-from torch.hub import load_state_dict_from_url
+from static_vars import StaticVars
 from torch import Tensor
-from torchvision.models import AlexNet
 from robustness.datasets import DATASETS
 
 from perceptual_advex.utilities import add_dataset_model_arguments, \
     get_dataset_model
-from perceptual_advex.datasets import ImageNet100C
-
-my_device = torch.device('cuda:0') if torch.cuda.is_available() else torch.device('mps')
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
@@ -46,8 +41,9 @@ if __name__ == '__main__':
 
     model.eval()
     alexnet.eval()
-    model.to(my_device)
-    alexnet.to(my_device)
+
+    model.to(StaticVars.DEVICE)
+    alexnet.to(StaticVars.DEVICE)
 
     with open(args.output, 'w') as output_file:
         output_csv = csv.writer(output_file)
@@ -76,13 +72,14 @@ if __name__ == '__main__':
                 alexnet_batches_correct: List[Tensor] = []
                 for batch_index, (inputs, labels) in enumerate(val_loader):
                     if (
-                        args.num_batches is not None and
-                        batch_index >= args.num_batches
+                            args.num_batches is not None and
+                            batch_index >= args.num_batches
                     ):
                         break
 
-                    inputs = inputs.to(my_device)
-                    labels = labels.to(my_device)
+
+                    inputs = inputs.to(StaticVars.DEVICE)
+                    labels = labels.to(StaticVars.DEVICE)
 
                     with torch.no_grad():
                         logits = model(inputs)
@@ -97,9 +94,9 @@ if __name__ == '__main__':
                 alexnet_accuracy = torch.cat(
                     alexnet_batches_correct).float().mean().item()
                 print('OVERALL\t',
-                    f'accuracy = {accuracy * 100:.1f}',
-                    f'AlexNet accuracy = {alexnet_accuracy * 100:.1f}',
-                    sep='\t')
+                      f'accuracy = {accuracy * 100:.1f}',
+                      f'AlexNet accuracy = {alexnet_accuracy * 100:.1f}',
+                      sep='\t')
 
                 model_errors.append(1 - accuracy)
                 alexnet_errors.append(1 - alexnet_accuracy)

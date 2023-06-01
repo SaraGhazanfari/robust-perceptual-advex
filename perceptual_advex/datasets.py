@@ -9,7 +9,7 @@ from robustness.datasets import CIFAR, DATASETS, DataSet, CustomImageNet
 from robustness.data_augmentation import TRAIN_TRANSFORMS_IMAGENET, \
     TEST_TRANSFORMS_IMAGENET
 from robustness import data_augmentation
-from torchvision.datasets.vision import VisionDataset 
+from torchvision.datasets.vision import VisionDataset
 
 
 class ImageNet100(CustomImageNet):
@@ -202,44 +202,44 @@ class CIFAR10C(CIFAR):
             mean=torch.tensor([0.4914, 0.4822, 0.4465]),
             std=torch.tensor([0.2023, 0.1994, 0.2010]),
             custom_class=CustomCIFAR10,
-            label_mapping=None, 
+            label_mapping=None,
             transform_train=data_augmentation.TRAIN_TRANSFORMS_DEFAULT(32),
             transform_test=data_augmentation.TEST_TRANSFORMS_DEFAULT(32)
         )
 
-
-class BirdOrBicycle(DataSet):
-    """
-    Bird-or-bicycle dataset.
-    https://github.com/google/unrestricted-adversarial-examples/tree/master/bird-or-bicycle
-    """
-
-    def __init__(self, data_path=None, **kwargs):
-        ds_name = 'bird_or_bicycle'
-        import bird_or_bicycle
-
-        # Need to create a temporary directory to act as the dataset because
-        # the robustness library expects a particular directory structure.
-        data_path = tempfile.mkdtemp()
-        os.symlink(bird_or_bicycle.get_dataset('extras'),
-                   os.path.join(data_path, 'train'))
-        os.symlink(bird_or_bicycle.get_dataset('test'),
-                   os.path.join(data_path, 'test'))
-
-        ds_kwargs = {
-            'num_classes': 2,
-            'mean': torch.tensor([0.4717, 0.4499, 0.3837]), 
-            'std': torch.tensor([0.2600, 0.2516, 0.2575]),
-            'custom_class': None,
-            'label_mapping': None,
-            'transform_train': TRAIN_TRANSFORMS_IMAGENET,
-            'transform_test': TEST_TRANSFORMS_IMAGENET,
-        }
-        super().__init__(ds_name, data_path, **ds_kwargs)
+#
+# class BirdOrBicycle(DataSet):
+#     """
+#     Bird-or-bicycle dataset.
+#     https://github.com/google/unrestricted-adversarial-examples/tree/master/bird-or-bicycle
+#     """
+#
+#     def __init__(self, data_path=None, **kwargs):
+#         ds_name = 'bird_or_bicycle'
+#         import bird_or_bicycle
+#
+#         # Need to create a temporary directory to act as the dataset because
+#         # the robustness library expects a particular directory structure.
+#         data_path = tempfile.mkdtemp()
+#         os.symlink(bird_or_bicycle.get_dataset('extras'),
+#                    os.path.join(data_path, 'train'))
+#         os.symlink(bird_or_bicycle.get_dataset('test'),
+#                    os.path.join(data_path, 'test'))
+#
+#         ds_kwargs = {
+#             'num_classes': 2,
+#             'mean': torch.tensor([0.4717, 0.4499, 0.3837]),
+#             'std': torch.tensor([0.2600, 0.2516, 0.2575]),
+#             'custom_class': None,
+#             'label_mapping': None,
+#             'transform_train': TRAIN_TRANSFORMS_IMAGENET,
+#             'transform_test': TEST_TRANSFORMS_IMAGENET,
+#         }
+#         super().__init__(ds_name, data_path, **ds_kwargs)
 
 
 DATASETS['imagenet100'] = ImageNet100
 DATASETS['imagenet100a'] = ImageNet100A
 DATASETS['imagenet100c'] = ImageNet100C
 DATASETS['cifar10c'] = CIFAR10C
-DATASETS['bird_or_bicycle'] = BirdOrBicycle
+# DATASETS['bird_or_bicycle'] = BirdOrBicycle

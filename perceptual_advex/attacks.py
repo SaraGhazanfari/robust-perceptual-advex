@@ -1,7 +1,4 @@
-import sys
-import os
 import functools
-from torch import nn
 from operator import mul
 from torch import optim
 from advex_uar.common.pyt_common import get_attack as get_uar_attack

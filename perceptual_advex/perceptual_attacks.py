@@ -3,11 +3,12 @@ import torch
 import torchvision.models as torchvision_models
 from torch.hub import load_state_dict_from_url
 import math
+from static_vars import StaticVars
 from torch import nn
 from torch.nn import functional as F
 from typing_extensions import Literal
 
-from .distances import normalize_flatten_features, OriginalLPIPSDistance
+from .distances import normalize_flatten_features, LPIPSDistance
 from .utilities import MarginLoss
 from .models import AlexNetFeatureModel, CifarAlexNet, FeatureModel
 from . import utilities
@@ -15,19 +16,10 @@ from . import utilities
 _cached_alexnet: Optional[AlexNetFeatureModel] = None
 _cached_alexnet_cifar: Optional[AlexNetFeatureModel] = None
 
-my_device = torch.device('cuda:0') if torch.cuda.is_available() else torch.device('mps')
 
-
-def get_lpips_model(
-        lpips_model_spec: Union[
-            Literal['self', 'alexnet', 'alexnet_cifar'],
-            FeatureModel,
-        ],
-        model: Optional[FeatureModel] = None,
-) -> FeatureModel:
+def get_lpips_model(lpips_model_spec: Union[Literal['self', 'alexnet', 'alexnet_cifar', 'r_lpips'],
+FeatureModel], model: Optional[FeatureModel] = None):
     global _cached_alexnet, _cached_alexnet_cifar
-
-    lpips_model: FeatureModel
 
     if lpips_model_spec == 'self':
         if model is None:
@@ -40,13 +32,13 @@ def get_lpips_model(
             alexnet_model = torchvision_models.alexnet(pretrained=True)
             _cached_alexnet = AlexNetFeatureModel(alexnet_model)
         lpips_model = _cached_alexnet
-        lpips_model.to(my_device)
+        lpips_model.to(StaticVars.DEVICE)
     elif lpips_model_spec == 'alexnet_cifar':
         if _cached_alexnet_cifar is None:
             alexnet_model = CifarAlexNet()
             _cached_alexnet_cifar = AlexNetFeatureModel(alexnet_model)
         lpips_model = _cached_alexnet_cifar
-        lpips_model.to(my_device)
+        lpips_model.to(StaticVars.DEVICE)
         try:
             state = torch.load('data/checkpoints/alexnet_cifar.pt')
         except FileNotFoundError:
@@ -99,7 +91,11 @@ class FastLagrangePerceptualAttack(nn.Module):
         self.decay_step_size = decay_step_size
         self.increase_lambda = increase_lambda
 
-        self.lpips_model = OriginalLPIPSDistance()
+        self.lpips_model = get_lpips_model(lpips_model, model)
+        self.lpips_distance = LPIPSDistance(
+            self.lpips_model,
+            include_image_as_activation=include_image_as_activation,
+        )
         self.projection = PROJECTIONS[projection](self.bound, self.lpips_model)
         self.loss = MarginLoss(kappa=kappa)
 
@@ -137,12 +133,12 @@ class FastLagrangePerceptualAttack(nn.Module):
 
             adv_inputs = inputs + perturbations
 
-            # if self.model == self.lpips_model:
-            #     adv_features, adv_logits = \
-            #         self._get_features_logits(adv_inputs)
-            # else:
-            adv_features = self._get_features(adv_inputs)
-            adv_logits = self.model(adv_inputs)
+            if self.model == self.lpips_model:
+                adv_features, adv_logits = \
+                    self._get_features_logits(adv_inputs)
+            else:
+                adv_features = self._get_features(adv_inputs)
+                adv_logits = self.model(adv_inputs)
 
             adv_loss = self.loss(adv_logits, labels)
 
@@ -311,7 +307,11 @@ class FirstOrderStepPerceptualAttack(nn.Module):
         self.num_iterations = num_iterations
         self.h = h
 
-        self.lpips_model = OriginalLPIPSDistance()
+        self.lpips_model = get_lpips_model(lpips_model, model)
+        self.lpips_distance = LPIPSDistance(
+            self.lpips_model,
+            include_image_as_activation=include_image_as_activation,
+        )
         self.loss = MarginLoss(kappa=kappa, targeted=targeted)
 
     def _multiply_matrix(self, v):
@@ -451,7 +451,7 @@ class PerceptualPGDAttack(nn.Module):
             else:
                 self.step = 2 * self.bound / self.num_iterations
 
-        self.lpips_model = OriginalLPIPSDistance()
+        self.lpips_model = get_lpips_model(lpips_model, model)
         self.first_order_step = FirstOrderStepPerceptualAttack(
             model, bound=self.step, num_iterations=cg_iterations, h=h,
             kappa=kappa, lpips_model=self.lpips_model,
@@ -534,7 +534,11 @@ class LagrangePerceptualAttack(nn.Module):
         self.random_targets = random_targets
         self.num_classes = num_classes
 
-        self.lpips_model = OriginalLPIPSDistance()
+        self.lpips_model = get_lpips_model(lpips_model, model)
+        self.lpips_distance = LPIPSDistance(
+            self.lpips_model,
+            include_image_as_activation=include_image_as_activation,
+        )
         self.loss = MarginLoss(kappa=kappa, targeted=self.random_targets)
         self.projection = PROJECTIONS[projection](self.bound, self.lpips_model)
 
@@ -545,7 +549,7 @@ class LagrangePerceptualAttack(nn.Module):
         the given natural input.
         """
 
-        return self.self.lpips_model(inputs, adv_inputs) <= self.bound
+        return self.lpips_distance(inputs, adv_inputs) <= self.bound
 
     def _attack(self, inputs, labels):
         perturbations = torch.zeros_like(inputs)
@@ -639,5 +643,3 @@ class LagrangePerceptualAttack(nn.Module):
             )
         else:
             return self._attack(inputs, labels)
-
-# python adv_train.py --parallel 4 --batch_size 128 --dataset cifar --arch resnet50 --attack "FastLagrangePerceptualAttack(model, bound=0.25, num_iterations=10, lpips_model='alexnet')" --only_attack_correct

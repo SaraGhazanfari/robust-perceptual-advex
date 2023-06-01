@@ -10,15 +10,15 @@ from torch import nn
 from typing_extensions import Literal
 
 from .models import AlexNetFeatureModel, FeatureModel
-
-my_device = torch.device('mps')
+from static_vars import StaticVars
 
 
 class ScalingLayer(nn.Module):
     def __init__(self):
         super(ScalingLayer, self).__init__()
-        self.register_buffer('shift', torch.tensor([-.030, -.088, -.188], device=my_device)[None, :, None, None])
-        self.register_buffer('scale', torch.tensor([.458, .448, .450], device=my_device)[None, :, None, None])
+        self.register_buffer('shift',
+                             torch.tensor([-.030, -.088, -.188], device=StaticVars.DEVICE)[None, :, None, None])
+        self.register_buffer('scale', torch.tensor([.458, .448, .450], device=StaticVars.DEVICE)[None, :, None, None])
 
     def forward(self, inp):
         return (inp - self.shift) / self.scale
@@ -31,7 +31,7 @@ class NetLinLayer(nn.Module):
         super(NetLinLayer, self).__init__()
         layers = [nn.Dropout(), ] if (use_dropout) else []
         layers += [nn.Conv2d(chn_in, chn_out, 1, stride=1, padding=0, bias=False), ]
-        self.model = nn.Sequential(*layers).to(my_device)
+        self.model = nn.Sequential(*layers).to(StaticVars.DEVICE)
 
     def forward(self, x):
         return self.model(x)
@@ -57,11 +57,11 @@ class ImageNetNormalizer(nn.Module):
 class OriginalLPIPSDistance(nn.Module):
     model: torchvision_models.AlexNet
 
-    def __init__(self):
+    def __init__(self, path):
         super().__init__()
         self.scaling_layer = ScalingLayer()
         self.normalizer = ImageNetNormalizer()
-        self.model = torchvision_models.alexnet(pretrained=True).to(my_device).eval()
+        self.model = torchvision_models.alexnet(pretrained=True).to(StaticVars.DEVICE).eval()
 
         assert len(self.model.features) == 13
         self.layer1 = nn.Sequential(self.model.features[:2])
@@ -79,8 +79,7 @@ class OriginalLPIPSDistance(nn.Module):
 
         self.only_conv_layers = [self.lin0, self.lin1, self.lin2, self.lin3, self.lin4]
         [layer.eval() for layer in self.only_conv_layers]
-        self.load_state_dict(torch.load('./lpips_checkpoints/latest_net_linf.pth',
-                                        map_location=my_device), strict=False)
+        self.load_state_dict(torch.load(path, map_location=StaticVars.DEVICE), strict=False)
 
     def normalize_tensor(self, in_feat, eps=1e-10):
         norm_factor = torch.sqrt(torch.sum(in_feat ** 2, dim=1, keepdim=True))
@@ -111,14 +110,7 @@ class OriginalLPIPSDistance(nn.Module):
         for idx in range(5):
             img_1_and_img_2_diff[idx] = (img1[idx] - img2[idx]) ** 2
             img_1_and_img_2_diff[idx].detach()
-
             res[idx] = self.spatial_average(img_1_and_img_2_diff[idx]).reshape(-1).detach()
-
-            # img_1_and_img_2_diff[idx] = (img1[idx]-img2[idx])**2
-            # img_1_and_img_2_diff[idx].detach()
-
-            # res[idx] = self.spatial_average(self.only_conv_layers[idx](
-            #     img_1_and_img_2_diff[idx])).reshape(-1).detach()
 
         res_sum = 0
         for i in range(len(res)):
@@ -226,8 +218,14 @@ def normalize_flatten_features(
 
     normalized_features: List[torch.Tensor] = []
     for feature_layer in features:
-        normalized_features.append(feature_layer.view(feature_layer.size()[0], -1))
-
+        norm_factor = torch.sqrt(
+            torch.sum(feature_layer ** 2, dim=1, keepdim=True)) + eps
+        normalized_features.append(
+            (feature_layer / (norm_factor *
+                              np.sqrt(feature_layer.size()[2] *
+                                      feature_layer.size()[3])))
+            .view(feature_layer.size()[0], -1)
+        )
     return torch.cat(normalized_features, dim=1)
 
 

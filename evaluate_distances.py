@@ -1,17 +1,13 @@
-import csv
-import torch
 import argparse
 import numpy as np
-import torch.nn as nn
-from typing import List, Literal, Tuple
-from perceptual_advex.models import FeatureModel
+
+import csv
+from typing import List
+
 from perceptual_advex.utilities import add_dataset_model_arguments, \
     get_dataset_model
-from perceptual_advex.distances import OriginalLPIPSDistance, LinfDistance, SSIM, \
-    L2Distance
-
-
-my_device = torch.device('cuda:0') if torch.cuda.is_available() else torch.device('mps')
+from perceptual_advex.distances import LinfDistance, SSIM, L2Distance, OriginalLPIPSDistance
+from perceptual_advex.attacks import *
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
@@ -26,7 +22,10 @@ if __name__ == '__main__':
     parser.add_argument('--output', type=str, help='output CSV')
     parser.add_argument('attacks', metavar='attack', type=str, nargs='+',
                         help='attack names')
-
+    parser.add_argument('--metric_name', type=str, default='lpips',
+                        help='similarity metric name, lpips or r-lpips')
+    parser.add_argument('--r_lpips_model_path', type=str, default=None,
+                        help='the path to r_lpips model')
     args = parser.parse_args()
 
     dist_models: List[Tuple[str, nn.Module]] = [
@@ -38,26 +37,33 @@ if __name__ == '__main__':
     dataset, model = get_dataset_model(args)
     if not isinstance(model, FeatureModel):
         raise TypeError('model must be a FeatureModel')
-    dist_models.append(('lpips_self', OriginalLPIPSDistance()))
+    dist_models.append(('lpips_self', LPIPSDistance(model)))
 
     alexnet_model_name: Literal['alexnet_cifar', 'alexnet']
     if args.dataset.startswith('cifar'):
         alexnet_model_name = 'alexnet_cifar'
     else:
         alexnet_model_name = 'alexnet'
-    dist_models.append((
-        'lpips_alexnet',
-        OriginalLPIPSDistance(),
-    ))
+
+    if args.metric_name == 'lpips':
+        dist_models.append((
+            'lpips_alexnet',
+            LPIPSDistance(get_lpips_model(alexnet_model_name, model)),
+        ))
+    else:
+        dist_models.append((
+            'r-lpips_alexnet',
+            OriginalLPIPSDistance(path=args.r_lpips_model_path),
+        ))
 
     for _, dist_model in dist_models:
         dist_model.eval()
-        dist_model.to(my_device)
+        dist_model.to(StaticVars.DEVICE)
 
     _, val_loader = dataset.make_loaders(1, args.batch_size, only_val=True)
 
     model.eval()
-    model.to(my_device)
+    model.to(StaticVars.DEVICE)
 
     attack_names: List[str] = args.attacks
 
@@ -81,8 +87,8 @@ if __name__ == '__main__':
 
             print(f'BATCH\t{batch_index:05d}')
 
-            inputs = inputs.to(my_device)
-            labels = labels.to(my_device)
+            inputs = inputs.to(StaticVars.DEVICE)
+            labels = labels.to(StaticVars.DEVICE)
 
             batch_distances = np.zeros((
                 inputs.shape[0],
