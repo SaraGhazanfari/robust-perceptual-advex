@@ -11,14 +11,14 @@ from typing_extensions import Literal
 
 from .models import AlexNetFeatureModel, FeatureModel
 
-cuda_device = torch.device('mps')
+my_device = torch.device('mps')
 
 
 class ScalingLayer(nn.Module):
     def __init__(self):
         super(ScalingLayer, self).__init__()
-        self.register_buffer('shift', torch.tensor([-.030, -.088, -.188], device=cuda_device)[None, :, None, None])
-        self.register_buffer('scale', torch.tensor([.458, .448, .450], device=cuda_device)[None, :, None, None])
+        self.register_buffer('shift', torch.tensor([-.030, -.088, -.188], device=my_device)[None, :, None, None])
+        self.register_buffer('scale', torch.tensor([.458, .448, .450], device=my_device)[None, :, None, None])
 
     def forward(self, inp):
         return (inp - self.shift) / self.scale
@@ -31,7 +31,7 @@ class NetLinLayer(nn.Module):
         super(NetLinLayer, self).__init__()
         layers = [nn.Dropout(), ] if (use_dropout) else []
         layers += [nn.Conv2d(chn_in, chn_out, 1, stride=1, padding=0, bias=False), ]
-        self.model = nn.Sequential(*layers).cuda()
+        self.model = nn.Sequential(*layers).to(my_device)
 
     def forward(self, x):
         return self.model(x)
@@ -54,14 +54,14 @@ class ImageNetNormalizer(nn.Module):
         )
 
 
-class SaraLPIPSDistance(nn.Module):
+class OriginalLPIPSDistance(nn.Module):
     model: torchvision_models.AlexNet
 
     def __init__(self):
         super().__init__()
         self.scaling_layer = ScalingLayer()
         self.normalizer = ImageNetNormalizer()
-        self.model = torchvision_models.alexnet(pretrained=True).cuda().eval()
+        self.model = torchvision_models.alexnet(pretrained=True).to(my_device).eval()
 
         assert len(self.model.features) == 13
         self.layer1 = nn.Sequential(self.model.features[:2])
@@ -80,7 +80,7 @@ class SaraLPIPSDistance(nn.Module):
         self.only_conv_layers = [self.lin0, self.lin1, self.lin2, self.lin3, self.lin4]
         [layer.eval() for layer in self.only_conv_layers]
         self.load_state_dict(torch.load('./lpips_checkpoints/latest_net_linf.pth',
-                                        map_location=cuda_device), strict=False)
+                                        map_location=my_device), strict=False)
 
     def normalize_tensor(self, in_feat, eps=1e-10):
         norm_factor = torch.sqrt(torch.sum(in_feat ** 2, dim=1, keepdim=True))

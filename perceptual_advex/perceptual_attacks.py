@@ -7,64 +7,63 @@ from torch import nn
 from torch.nn import functional as F
 from typing_extensions import Literal
 
-from .distances import normalize_flatten_features, SaraLPIPSDistance
+from .distances import normalize_flatten_features, OriginalLPIPSDistance
 from .utilities import MarginLoss
 from .models import AlexNetFeatureModel, CifarAlexNet, FeatureModel
 from . import utilities
 
-
 _cached_alexnet: Optional[AlexNetFeatureModel] = None
 _cached_alexnet_cifar: Optional[AlexNetFeatureModel] = None
 
+my_device = torch.device('cuda:0') if torch.cuda.is_available() else torch.device('mps')
 
-# def get_lpips_model(
-#     lpips_model_spec: Union[
-#         Literal['self', 'alexnet', 'alexnet_cifar'],
-#         FeatureModel,
-#     ],
-#     model: Optional[FeatureModel] = None,
-# ) -> FeatureModel:
-#     global _cached_alexnet, _cached_alexnet_cifar
-#
-#     lpips_model: FeatureModel
-#
-#     if lpips_model_spec == 'self':
-#         if model is None:
-#             raise ValueError(
-#                 'Specified "self" for LPIPS model but no model passed'
-#             )
-#         return model
-#     elif lpips_model_spec == 'alexnet':
-#         if _cached_alexnet is None:
-#             alexnet_model = torchvision_models.alexnet(pretrained=True)
-#             _cached_alexnet = AlexNetFeatureModel(alexnet_model)
-#         lpips_model = _cached_alexnet
-#         if torch.cuda.is_available():
-#             lpips_model.cuda()
-#     elif lpips_model_spec == 'alexnet_cifar':
-#         if _cached_alexnet_cifar is None:
-#             alexnet_model = CifarAlexNet()
-#             _cached_alexnet_cifar = AlexNetFeatureModel(alexnet_model)
-#         lpips_model = _cached_alexnet_cifar
-#         if torch.cuda.is_available():
-#             lpips_model.cuda()
-#         try:
-#             state = torch.load('data/checkpoints/alexnet_cifar.pt')
-#         except FileNotFoundError:
-#             state = load_state_dict_from_url(
-#                 'https://perceptual-advex.s3.us-east-2.amazonaws.com/'
-#                 'alexnet_cifar.pt',
-#                 progress=True,
-#             )
-#         lpips_model.load_state_dict(state['model'])
-#     elif isinstance(lpips_model_spec, str):
-#         raise ValueError(f'Invalid LPIPS model "{lpips_model_spec}"')
-#     else:
-#         lpips_model = lpips_model_spec
-#
-#     lpips_model.eval()
-#     return lpips_model
-#
+
+def get_lpips_model(
+        lpips_model_spec: Union[
+            Literal['self', 'alexnet', 'alexnet_cifar'],
+            FeatureModel,
+        ],
+        model: Optional[FeatureModel] = None,
+) -> FeatureModel:
+    global _cached_alexnet, _cached_alexnet_cifar
+
+    lpips_model: FeatureModel
+
+    if lpips_model_spec == 'self':
+        if model is None:
+            raise ValueError(
+                'Specified "self" for LPIPS model but no model passed'
+            )
+        return model
+    elif lpips_model_spec == 'alexnet':
+        if _cached_alexnet is None:
+            alexnet_model = torchvision_models.alexnet(pretrained=True)
+            _cached_alexnet = AlexNetFeatureModel(alexnet_model)
+        lpips_model = _cached_alexnet
+        lpips_model.to(my_device)
+    elif lpips_model_spec == 'alexnet_cifar':
+        if _cached_alexnet_cifar is None:
+            alexnet_model = CifarAlexNet()
+            _cached_alexnet_cifar = AlexNetFeatureModel(alexnet_model)
+        lpips_model = _cached_alexnet_cifar
+        lpips_model.to(my_device)
+        try:
+            state = torch.load('data/checkpoints/alexnet_cifar.pt')
+        except FileNotFoundError:
+            state = load_state_dict_from_url(
+                'https://perceptual-advex.s3.us-east-2.amazonaws.com/'
+                'alexnet_cifar.pt',
+                progress=True,
+            )
+        lpips_model.load_state_dict(state['model'])
+    elif isinstance(lpips_model_spec, str):
+        raise ValueError(f'Invalid LPIPS model "{lpips_model_spec}"')
+    else:
+        lpips_model = lpips_model_spec
+
+    lpips_model.eval()
+    return lpips_model
+
 
 class FastLagrangePerceptualAttack(nn.Module):
     def __init__(self, model, bound=0.5, step=None, num_iterations=20,
@@ -100,7 +99,7 @@ class FastLagrangePerceptualAttack(nn.Module):
         self.decay_step_size = decay_step_size
         self.increase_lambda = increase_lambda
 
-        self.lpips_model = SaraLPIPSDistance()
+        self.lpips_model = OriginalLPIPSDistance()
         self.projection = PROJECTIONS[projection](self.bound, self.lpips_model)
         self.loss = MarginLoss(kappa=kappa)
 
@@ -108,7 +107,7 @@ class FastLagrangePerceptualAttack(nn.Module):
         return normalize_flatten_features(self.lpips_model.features(inputs))
 
     def _get_features_logits(
-        self, inputs: torch.Tensor
+            self, inputs: torch.Tensor
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         features, logits = self.lpips_model.features_logits(inputs)
         return normalize_flatten_features(features), logits
@@ -154,21 +153,21 @@ class FastLagrangePerceptualAttack(nn.Module):
 
             grad = perturbations.grad.data
             grad_normed = grad / \
-                (grad.reshape(grad.size()[0], -1).norm(dim=1)
-                 [:, None, None, None] + 1e-8)
+                          (grad.reshape(grad.size()[0], -1).norm(dim=1)
+                           [:, None, None, None] + 1e-8)
 
             dist_grads = (
-                adv_features - self._get_features(
-                    inputs + perturbations - grad_normed * self.h)
-            ).norm(dim=1) / 0.1
+                                 adv_features - self._get_features(
+                             inputs + perturbations - grad_normed * self.h)
+                         ).norm(dim=1) / 0.1
 
             perturbation_updates = -grad_normed * (
-                step_size / (dist_grads + 1e-4)
-            )[:, None, None, None]
+                                                          step_size / (dist_grads + 1e-4)
+                                                  )[:, None, None, None]
 
             perturbations.data = (
-                (inputs + perturbations + perturbation_updates).clamp(0, 1) -
-                inputs
+                    (inputs + perturbations + perturbation_updates).clamp(0, 1) -
+                    inputs
             ).detach()
 
         adv_inputs = (inputs + perturbations).detach()
@@ -203,8 +202,8 @@ class BisectionPerceptualProjection(nn.Module):
 
         for _ in range(self.num_steps):
             projected_adv_inputs = (
-                inputs * (1 - lam[:, None, None, None]) +
-                adv_inputs * lam[:, None, None, None]
+                    inputs * (1 - lam[:, None, None, None]) +
+                    adv_inputs * lam[:, None, None, None]
             )
             adv_features = self.lpips_model.features(projected_adv_inputs)
             adv_features = normalize_flatten_features(adv_features).detach()
@@ -215,7 +214,7 @@ class BisectionPerceptualProjection(nn.Module):
                 lam[norm_diff_features > self.bound]
             lam_min[norm_diff_features <= self.bound] = \
                 lam[norm_diff_features <= self.bound]
-            lam = 0.5*(lam_min + lam_max)
+            lam = 0.5 * (lam_min + lam_max)
         return projected_adv_inputs.detach()
 
 
@@ -258,13 +257,13 @@ class NewtonsPerceptualProjection(nn.Module):
             grad_norm = adv_inputs.grad.data[needs_projection] \
                 .view(needs_projection.sum(), -1).norm(dim=1)
             inverse_grad = adv_inputs.grad.data[needs_projection] / \
-                grad_norm[:, None, None, None] ** 2
+                           grad_norm[:, None, None, None] ** 2
 
             adv_inputs.data[needs_projection] = (
-                adv_inputs.data[needs_projection] -
-                projection_step_size[:, None, None, None] *
-                (1 + self.projection_overshoot) *
-                inverse_grad
+                    adv_inputs.data[needs_projection] -
+                    projection_step_size[:, None, None, None] *
+                    (1 + self.projection_overshoot) *
+                    inverse_grad
             ).clamp(0, 1).detach()
 
             needs_projection[needs_projection.clone()] = \
@@ -312,7 +311,7 @@ class FirstOrderStepPerceptualAttack(nn.Module):
         self.num_iterations = num_iterations
         self.h = h
 
-        self.lpips_model = SaraLPIPSDistance()
+        self.lpips_model = OriginalLPIPSDistance()
         self.loss = MarginLoss(kappa=kappa, targeted=targeted)
 
     def _multiply_matrix(self, v):
@@ -328,9 +327,9 @@ class FirstOrderStepPerceptualAttack(nn.Module):
             v_features = self.lpips_model.features(self.inputs.detach() +
                                                    self.h * v)
             D_phi_v = (
-                normalize_flatten_features(v_features) -
-                self.input_features
-            ) / self.h
+                              normalize_flatten_features(v_features) -
+                              self.input_features
+                      ) / self.h
 
         torch.sum(self.input_features * D_phi_v).backward(retain_graph=True)
 
@@ -376,9 +375,9 @@ class FirstOrderStepPerceptualAttack(nn.Module):
 
             # print('|r|^2 =', ' '.join(f'{z:.2f}' for z in r_T_r))
             alpha = (
-                r_T_r /
-                (p_last * A_p_last).sum(dim=[1, 2, 3])
-            )[:, None, None, None]
+                            r_T_r /
+                            (p_last * A_p_last).sum(dim=[1, 2, 3])
+                    )[:, None, None, None]
             x = x_last + alpha * p_last
 
             # These calculations aren't necessary on the last iteration.
@@ -386,17 +385,17 @@ class FirstOrderStepPerceptualAttack(nn.Module):
                 r = r_last - alpha * A_p_last
 
                 beta = (
-                    (r ** 2).sum(dim=[1, 2, 3]) /
-                    r_T_r
-                )[:, None, None, None]
+                               (r ** 2).sum(dim=[1, 2, 3]) /
+                               r_T_r
+                       )[:, None, None, None]
                 p = r + beta * p_last
 
         x_features = self.lpips_model.features(self.inputs.detach() +
                                                self.h * x)
         D_phi_x = (
-            normalize_flatten_features(x_features) -
-            self.input_features
-        ) / self.h
+                          normalize_flatten_features(x_features) -
+                          self.input_features
+                  ) / self.h
 
         lam = (self.bound / D_phi_x.norm(dim=1))[:, None, None, None]
 
@@ -452,7 +451,7 @@ class PerceptualPGDAttack(nn.Module):
             else:
                 self.step = 2 * self.bound / self.num_iterations
 
-        self.lpips_model = SaraLPIPSDistance()
+        self.lpips_model = OriginalLPIPSDistance()
         self.first_order_step = FirstOrderStepPerceptualAttack(
             model, bound=self.step, num_iterations=cg_iterations, h=h,
             kappa=kappa, lpips_model=self.lpips_model,
@@ -471,7 +470,7 @@ class PerceptualPGDAttack(nn.Module):
         for attack_iter in range(self.num_iterations):
             if self.decay_step_size:
                 step_size = self.step * \
-                    0.1 ** (attack_iter / self.num_iterations)
+                            0.1 ** (attack_iter / self.num_iterations)
                 self.first_order_step.bound = step_size
             adv_inputs = self.first_order_step(adv_inputs, labels)
             adv_inputs = self.projection(inputs, adv_inputs, input_features)
@@ -494,6 +493,7 @@ class PerceptualPGDAttack(nn.Module):
             )
         else:
             return self._attack(inputs, labels)
+
 
 class LagrangePerceptualAttack(nn.Module):
     def __init__(self, model, bound=0.5, step=None, num_iterations=20,
@@ -534,7 +534,7 @@ class LagrangePerceptualAttack(nn.Module):
         self.random_targets = random_targets
         self.num_classes = num_classes
 
-        self.lpips_model = SaraLPIPSDistance()
+        self.lpips_model = OriginalLPIPSDistance()
         self.loss = MarginLoss(kappa=kappa, targeted=self.random_targets)
         self.projection = PROJECTIONS[projection](self.bound, self.lpips_model)
 
@@ -566,7 +566,7 @@ class LagrangePerceptualAttack(nn.Module):
             for attack_iter in range(self.num_iterations):
                 if self.decay_step_size:
                     step_size = self.step * \
-                        (0.1 ** (attack_iter / self.num_iterations))
+                                (0.1 ** (attack_iter / self.num_iterations))
                 else:
                     step_size = self.step
 
@@ -594,23 +594,23 @@ class LagrangePerceptualAttack(nn.Module):
 
                 grad = perturbations.grad.data[live]
                 grad_normed = grad / \
-                    (grad.reshape(grad.size()[0], -1).norm(dim=1)
-                     [:, None, None, None] + 1e-8)
+                              (grad.reshape(grad.size()[0], -1).norm(dim=1)
+                               [:, None, None, None] + 1e-8)
 
                 dist_grads = (
-                    adv_features -
-                    normalize_flatten_features(self.lpips_model.features(
-                        adv_inputs - grad_normed * self.h))
-                ).norm(dim=1) / self.h
+                                     adv_features -
+                                     normalize_flatten_features(self.lpips_model.features(
+                                         adv_inputs - grad_normed * self.h))
+                             ).norm(dim=1) / self.h
 
                 updates = -grad_normed * (
-                    step_size / (dist_grads + 1e-8)
-                )[:, None, None, None]
+                                                 step_size / (dist_grads + 1e-8)
+                                         )[:, None, None, None]
 
                 perturbations.data[live] = (
-                    (inputs[live] + perturbations[live] +
-                     updates).clamp(0, 1) -
-                    inputs[live]
+                        (inputs[live] + perturbations[live] +
+                         updates).clamp(0, 1) -
+                        inputs[live]
                 ).detach()
 
                 if self.random_targets:
@@ -639,6 +639,5 @@ class LagrangePerceptualAttack(nn.Module):
             )
         else:
             return self._attack(inputs, labels)
-
 
 # python adv_train.py --parallel 4 --batch_size 128 --dataset cifar --arch resnet50 --attack "FastLagrangePerceptualAttack(model, bound=0.25, num_iterations=10, lpips_model='alexnet')" --only_attack_correct

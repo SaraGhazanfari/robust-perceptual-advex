@@ -4,8 +4,8 @@ import random
 import copy
 from torch import nn
 
-from .distances import SaraLPIPSDistance
-
+from .distances import OriginalLPIPSDistance
+my_device = torch.device('cuda:0') if torch.cuda.is_available() else torch.device('mps')
 
 def evaluate_against_attacks(model, attacks, val_loader, parallel=1,
                              writer=None, iteration=None, num_batches=None):
@@ -14,12 +14,11 @@ def evaluate_against_attacks(model, attacks, val_loader, parallel=1,
     optionally writing it to a tensorboardX summary writer.
     """
 
-    model_lpips_model: nn.Module = SaraLPIPSDistance()
-    alexnet_lpips_model: nn.Module = SaraLPIPSDistance()
+    model_lpips_model: nn.Module = OriginalLPIPSDistance()
+    alexnet_lpips_model: nn.Module = OriginalLPIPSDistance()
 
-    if torch.cuda.is_available():
-        model_lpips_model.cuda()
-        alexnet_lpips_model.cuda()
+    model_lpips_model.to(my_device)
+    alexnet_lpips_model.to(my_device)
 
     model_state_dict = copy.deepcopy(model.state_dict())
 
@@ -37,9 +36,9 @@ def evaluate_against_attacks(model, attacks, val_loader, parallel=1,
             if num_batches is not None and batch_index >= num_batches:
                 break
 
-            if torch.cuda.is_available():
-                inputs = inputs.cuda()
-                labels = labels.cuda()
+
+            inputs = inputs.to(my_device)
+            labels = labels.to(my_device)
 
             adv_inputs = attack(inputs, labels)
 

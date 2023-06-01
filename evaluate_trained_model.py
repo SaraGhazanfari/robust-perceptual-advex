@@ -1,6 +1,5 @@
 
 from typing import Dict, List
-import torch
 import csv
 import argparse
 
@@ -8,6 +7,7 @@ from perceptual_advex.utilities import add_dataset_model_arguments, \
     get_dataset_model
 from perceptual_advex.attacks import *
 
+my_device = torch.device('cuda:0') if torch.cuda.is_available() else torch.device('mps')
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
@@ -32,17 +32,15 @@ if __name__ == '__main__':
     _, val_loader = dataset.make_loaders(1, args.batch_size, only_val=True)
 
     model.eval()
-    if torch.cuda.is_available():
-        model.cuda()
+    model.to(my_device)
 
     attack_names: List[str] = args.attacks
     attacks = [eval(attack_name) for attack_name in attack_names]
 
     # Parallelize
-    if torch.cuda.is_available():
-        device_ids = list(range(args.parallel))
-        model = nn.DataParallel(model, device_ids)
-        attacks = [nn.DataParallel(attack, device_ids) for attack in attacks]
+    device_ids = list(range(args.parallel))
+    model = nn.DataParallel(model, device_ids)
+    attacks = [nn.DataParallel(attack, device_ids) for attack in attacks]
 
     batches_correct: Dict[str, List[torch.Tensor]] = \
         {attack_name: [] for attack_name in attack_names}
@@ -56,9 +54,8 @@ if __name__ == '__main__':
         ):
             break
 
-        if torch.cuda.is_available():
-            inputs = inputs.cuda()
-            labels = labels.cuda()
+        inputs = inputs.to(my_device)
+        labels = labels.to(my_device)
 
         for attack_name, attack in zip(attack_names, attacks):
             adv_inputs = attack(inputs, labels)

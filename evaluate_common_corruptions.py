@@ -14,6 +14,7 @@ from perceptual_advex.utilities import add_dataset_model_arguments, \
     get_dataset_model
 from perceptual_advex.datasets import ImageNet100C
 
+my_device = torch.device('cuda:0') if torch.cuda.is_available() else torch.device('mps')
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
@@ -45,9 +46,8 @@ if __name__ == '__main__':
 
     model.eval()
     alexnet.eval()
-    if torch.cuda.is_available():
-        model.cuda()
-        alexnet.cuda()
+    model.to(my_device)
+    alexnet.to(my_device)
 
     with open(args.output, 'w') as output_file:
         output_csv = csv.writer(output_file)
@@ -81,9 +81,8 @@ if __name__ == '__main__':
                     ):
                         break
 
-                    if torch.cuda.is_available():
-                        inputs = inputs.cuda()
-                        labels = labels.cuda()
+                    inputs = inputs.to(my_device)
+                    labels = labels.to(my_device)
 
                     with torch.no_grad():
                         logits = model(inputs)

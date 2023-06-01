@@ -1,13 +1,12 @@
-from typing import Any, Callable, List, Optional, cast
-import torch
+from typing import Any, Callable, List
+
 import argparse
 import numpy as np
 import shutil
 import glob
 import time
 import random
-import os
-from torch import nn
+
 from tensorboardX import SummaryWriter
 
 from perceptual_advex import evaluation
@@ -17,7 +16,7 @@ from perceptual_advex.attacks import *
 from perceptual_advex.models import FeatureModel
 
 VAL_ITERS = 100
-
+my_device = torch.device('cuda:0') if torch.cuda.is_available() else torch.device('mps')
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -38,7 +37,7 @@ if __name__ == '__main__':
                         help='model to use for LPIPS distance')
     parser.add_argument('--only_attack_correct', action='store_true',
                         default=False, help='only attack examples that '
-                        'are classified correctly')
+                                            'are classified correctly')
     parser.add_argument('--randomize_attack', action='store_true',
                         default=False,
                         help='randomly choose an attack at each step')
@@ -57,7 +56,7 @@ if __name__ == '__main__':
                         help='learning rate')
     parser.add_argument('--lr_schedule', type=str, required=False,
                         help='comma-separated list of epochs when learning '
-                        'rate should drop')
+                             'rate should drop')
     parser.add_argument('--clip_grad', type=float, default=1.0,
                         help='clip gradients to this value')
 
@@ -82,8 +81,8 @@ if __name__ == '__main__':
             if args.num_epochs is None:
                 args.num_epochs = 100
         elif (
-            args.dataset.startswith('imagenet')
-            or args.dataset == 'bird_or_bicycle'
+                args.dataset.startswith('imagenet')
+                or args.dataset == 'bird_or_bicycle'
         ):
             if args.lr is None:
                 args.lr = 1e-1
@@ -99,14 +98,12 @@ if __name__ == '__main__':
     dataset, model = get_dataset_model(args)
     if isinstance(model, FeatureModel):
         model.allow_train()
-    if torch.cuda.is_available():
-        model.cuda()
+    model.to(my_device)
 
     if args.lpips_model is not None:
         _, lpips_model = get_dataset_model(
             args, checkpoint_fname=args.lpips_model)
-        if torch.cuda.is_available():
-            lpips_model.cuda()
+        lpips_model.to(my_device)
 
     train_loader, val_loader = dataset.make_loaders(
         workers=4, batch_size=args.batch_size)
@@ -167,8 +164,8 @@ if __name__ == '__main__':
     optimizer: optim.Optimizer
     if args.optim == 'sgd':
         weight_decay = 1e-4 if (
-            args.dataset.startswith('imagenet')
-            or args.dataset == 'bird_or_bicycle'
+                args.dataset.startswith('imagenet')
+                or args.dataset == 'bird_or_bicycle'
         ) else 2e-4
         optimizer = optim.SGD(model.parameters(),
                               lr=args.lr,
@@ -182,6 +179,7 @@ if __name__ == '__main__':
     lr_drop_epochs = [int(epoch_str) for epoch_str in
                       args.lr_schedule.split(',')]
 
+
     # check for checkpoints
     def get_checkpoint_fnames():
         for checkpoint_fname in glob.glob(os.path.join(glob.escape(log_dir),
@@ -189,6 +187,7 @@ if __name__ == '__main__':
             epoch = int(os.path.basename(checkpoint_fname).split('.')[0])
             if epoch < args.num_epochs:
                 yield epoch, checkpoint_fname
+
 
     start_epoch = 0
     latest_checkpoint_epoch = -1
@@ -213,21 +212,21 @@ if __name__ == '__main__':
             adaptive_eps = state.get('adaptive_eps', {})
 
     # parallelize
-    if torch.cuda.is_available():
-        device_ids = list(range(args.parallel))
-        model = nn.DataParallel(model, device_ids)
-        attacks = [nn.DataParallel(attack, device_ids) for attack in attacks]
-        validation_attacks = [nn.DataParallel(attack, device_ids)
-                              for attack in validation_attacks]
+    device_ids = list(range(args.parallel))
+    model = nn.DataParallel(model, device_ids)
+    attacks = [nn.DataParallel(attack, device_ids) for attack in attacks]
+    validation_attacks = [nn.DataParallel(attack, device_ids)
+                          for attack in validation_attacks]
+
 
     # necessary to put training loop in a function because otherwise we get
     # huge memory leaks
     def run_iter(
-        inputs: torch.Tensor,
-        labels: torch.Tensor,
-        iteration: int,
-        train: bool = True,
-        log_fn: Optional[Callable[[str, Any], Any]] = None,
+            inputs: torch.Tensor,
+            labels: torch.Tensor,
+            iteration: int,
+            train: bool = True,
+            log_fn: Optional[Callable[[str, Any], Any]] = None,
     ):
         prefix = 'train' if train else 'val'
         if log_fn is None:
@@ -236,9 +235,8 @@ if __name__ == '__main__':
 
         model.eval()  # set model to eval to generate adversarial examples
 
-        if torch.cuda.is_available():
-            inputs = inputs.cuda()
-            labels = labels.cuda()
+        inputs = inputs.to(my_device)
+        labels = labels.to(my_device)
 
         if args.only_attack_correct:
             with torch.no_grad():
@@ -288,9 +286,9 @@ if __name__ == '__main__':
                 else:
                     attack_name = attack.__class__.__name__
                 attack_logits = logits[
-                    attack_index * inputs.size()[0]:
-                    (attack_index + 1) * inputs.size()[0]
-                ]
+                                attack_index * inputs.size()[0]:
+                                (attack_index + 1) * inputs.size()[0]
+                                ]
                 log_fn(f'loss/{attack_name}',
                        F.cross_entropy(attack_logits, labels).item())
                 log_fn(f'accuracy/{attack_name}',
@@ -309,6 +307,7 @@ if __name__ == '__main__':
             # clip gradients and optimize
             nn.utils.clip_grad_value_(model.parameters(), args.clip_grad)
             optimizer.step()
+
 
     for epoch in range(start_epoch, args.num_epochs):
         lr = args.lr
@@ -369,5 +368,3 @@ if __name__ == '__main__':
         model, validation_attacks, val_loader, parallel=args.parallel,
     )
     print('END EVALUATION')
-
-#python adv_train.py --parallel 4 --batch_size 50 --dataset cifar --arch resnet50 --attack "FastLagrangePerceptualAttack(model, bound=0.25, num_iterations=10, lpips_model='alexnet')" --only_attack_correct

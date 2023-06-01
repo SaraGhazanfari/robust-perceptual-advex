@@ -1,21 +1,17 @@
+import csv
+import torch
 import argparse
 import numpy as np
-
-import torch
-import csv
-from torch import nn
-from typing import List, Tuple
-from typing_extensions import Literal
-
+import torch.nn as nn
+from typing import List, Literal, Tuple
+from perceptual_advex.models import FeatureModel
 from perceptual_advex.utilities import add_dataset_model_arguments, \
     get_dataset_model
-from perceptual_advex.distances import SaraLPIPSDistance, LinfDistance, SSIM, \
+from perceptual_advex.distances import OriginalLPIPSDistance, LinfDistance, SSIM, \
     L2Distance
-from perceptual_advex.models import FeatureModel
-from perceptual_advex.perceptual_attacks import get_lpips_model
-from perceptual_advex.perceptual_attacks import *
-from perceptual_advex.attacks import *
 
+
+my_device = torch.device('cuda:0') if torch.cuda.is_available() else torch.device('mps')
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
@@ -42,7 +38,7 @@ if __name__ == '__main__':
     dataset, model = get_dataset_model(args)
     if not isinstance(model, FeatureModel):
         raise TypeError('model must be a FeatureModel')
-    dist_models.append(('lpips_self', SaraLPIPSDistance()))
+    dist_models.append(('lpips_self', OriginalLPIPSDistance()))
 
     alexnet_model_name: Literal['alexnet_cifar', 'alexnet']
     if args.dataset.startswith('cifar'):
@@ -51,19 +47,17 @@ if __name__ == '__main__':
         alexnet_model_name = 'alexnet'
     dist_models.append((
         'lpips_alexnet',
-        SaraLPIPSDistance(),
+        OriginalLPIPSDistance(),
     ))
 
     for _, dist_model in dist_models:
         dist_model.eval()
-        if torch.cuda.is_available():
-            dist_model.cuda()
+        dist_model.to(my_device)
 
     _, val_loader = dataset.make_loaders(1, args.batch_size, only_val=True)
 
     model.eval()
-    if torch.cuda.is_available():
-        model.cuda()
+    model.to(my_device)
 
     attack_names: List[str] = args.attacks
 
@@ -80,16 +74,15 @@ if __name__ == '__main__':
 
         for batch_index, (inputs, labels) in enumerate(val_loader):
             if (
-                args.num_batches is not None and
-                batch_index >= args.num_batches
+                    args.num_batches is not None and
+                    batch_index >= args.num_batches
             ):
                 break
 
             print(f'BATCH\t{batch_index:05d}')
 
-            if torch.cuda.is_available():
-                inputs = inputs.cuda()
-                labels = labels.cuda()
+            inputs = inputs.to(my_device)
+            labels = labels.to(my_device)
 
             batch_distances = np.zeros((
                 inputs.shape[0],
@@ -105,8 +98,8 @@ if __name__ == '__main__':
                     for dist_model_index, (_, dist_model) in \
                             enumerate(dist_models):
                         batch_distances[
-                            :,
-                            attack_index * len(dist_models) + dist_model_index
+                        :,
+                        attack_index * len(dist_models) + dist_model_index
                         ] = dist_model(
                             inputs,
                             adv_inputs,
