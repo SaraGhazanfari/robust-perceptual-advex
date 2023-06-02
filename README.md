@@ -58,6 +58,8 @@ The following command was used to evaluate CIFAR-10 classifiers for Tables 2, 6,
     "AutoL2Attack(model, 'cifar', bound=1)" \
     "StAdvAttack(model, num_iterations=100)" \
     "ReColorAdvAttack(model, num_iterations=100)" \
+    "PerceptualPGDAttack(model, num_iterations=40, bound=0.5, lpips_model='alexnet_cifar', projection='newtons')" \
+    "LagrangePerceptualAttack(model, num_iterations=40, bound=0.5, lpips_model='alexnet_cifar', projection='newtons')"\
     "PerceptualPGDAttack(model, num_iterations=40, bound=0.5, lpips_model='r-lpips', path='path/to/r-lpips/model', projection='newtons')" \
     "LagrangePerceptualAttack(model, num_iterations=40, bound=0.5, lpips_model='r-lpips', path='path/to/r-lpips/model', projection='newtons')"
 
@@ -72,6 +74,8 @@ The following command was used to evaluate ImageNet-100 classifiers for Table 3 
     "JPEGLinfAttack(model, 'imagenet100', bound=0.125, num_iterations=200)" \
     "StAdvAttack(model, bound=0.05, num_iterations=200)" \
     "ReColorAdvAttack(model, bound=0.06, num_iterations=200)" \
+    "PerceptualPGDAttack(model, bound=0.5, lpips_model='alexnet', num_iterations=40)" \
+    "LagrangePerceptualAttack(model, bound=0.5, lpips_model='alexnet', num_iterations=40)"\
     "PerceptualPGDAttack(model, bound=0.5, lpips_model='alexnet', num_iterations=40, lpips_model='r-lpips', path='path/to/r-lpips/model')" \
     "LagrangePerceptualAttack(model, bound=0.5, lpips_model='alexnet', num_iterations=40, lpips_model='r-lpips', path='path/to/r-lpips/model')"
 
