@@ -3,12 +3,10 @@ Scripts that generates a number of adversarial examples for each of several
 attacks against a particular network.
 """
 
-import torch
 import argparse
 import numpy as np
 import itertools
 from torchvision.utils import save_image
-from static_vars import StaticVars
 from perceptual_advex.attacks import *
 from perceptual_advex.utilities import add_dataset_model_arguments, \
     get_dataset_model

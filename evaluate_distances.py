@@ -22,8 +22,6 @@ if __name__ == '__main__':
     parser.add_argument('--output', type=str, help='output CSV')
     parser.add_argument('attacks', metavar='attack', type=str, nargs='+',
                         help='attack names')
-    parser.add_argument('--metric_name', type=str, default='lpips',
-                        help='similarity metric name, lpips or r-lpips')
     parser.add_argument('--r_lpips_model_path', type=str, default=None,
                         help='the path to r_lpips model')
     args = parser.parse_args()
@@ -45,16 +43,15 @@ if __name__ == '__main__':
     else:
         alexnet_model_name = 'alexnet'
 
-    if args.metric_name == 'lpips':
-        dist_models.append((
-            'lpips_alexnet',
-            LPIPSDistance(get_lpips_model(alexnet_model_name, model)),
-        ))
-    else:
-        dist_models.append((
-            'r-lpips_alexnet',
-            OriginalLPIPSDistance(path=args.r_lpips_model_path),
-        ))
+    dist_models.append((
+        'lpips_alexnet',
+        LPIPSDistance(get_lpips_model(alexnet_model_name, model)),
+     ))
+
+    dist_models.append((
+        'r-lpips_alexnet',
+        OriginalLPIPSDistance(path=args.r_lpips_model_path),
+    ))
 
     for _, dist_model in dist_models:
         dist_model.eval()

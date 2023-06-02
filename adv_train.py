@@ -1,4 +1,4 @@
-from typing import Any, Callable, List, Optional, cast
+from typing import Any, Callable, List
 import argparse
 import numpy as np
 import shutil
@@ -6,7 +6,7 @@ import glob
 import time
 import random
 from tensorboardX import SummaryWriter
-
+import os
 from perceptual_advex import evaluation
 from perceptual_advex.utilities import add_dataset_model_arguments, \
     get_dataset_model, calculate_accuracy
@@ -60,6 +60,8 @@ if __name__ == '__main__':
 
     parser.add_argument('--attack', type=str, action='append',
                         help='attack(s) to harden against')
+    parser.add_argument('--r_lpips_model_path', type=str, default=None,
+                        help='the path to r_lpips model')
 
     args = parser.parse_args()
 
@@ -99,7 +101,7 @@ if __name__ == '__main__':
 
     model.to(StaticVars.DEVICE)
 
-    if args.lpips_model is not None:
+    if args.lpips_model is not None and args.lpips_model != 'r-lpips':
         _, lpips_model = get_dataset_model(
             args, checkpoint_fname=args.lpips_model)
 
@@ -121,7 +123,7 @@ if __name__ == '__main__':
                   num_iterations=VAL_ITERS),
         StAdvAttack(model, num_iterations=VAL_ITERS),
         ReColorAdvAttack(model, num_iterations=VAL_ITERS),
-        LagrangePerceptualAttack(model, num_iterations=30),
+        LagrangePerceptualAttack(model, num_iterations=30, path=args.r_lpips_model_path),
     ]
 
     flags = []

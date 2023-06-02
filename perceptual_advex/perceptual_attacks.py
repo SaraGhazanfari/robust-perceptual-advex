@@ -8,7 +8,7 @@ from torch import nn
 from torch.nn import functional as F
 from typing_extensions import Literal
 
-from .distances import normalize_flatten_features, LPIPSDistance
+from .distances import normalize_flatten_features, LPIPSDistance, OriginalLPIPSDistance
 from .utilities import MarginLoss
 from .models import AlexNetFeatureModel, CifarAlexNet, FeatureModel
 from . import utilities
@@ -61,7 +61,7 @@ class FastLagrangePerceptualAttack(nn.Module):
     def __init__(self, model, bound=0.5, step=None, num_iterations=20,
                  lam=10, h=1e-1, lpips_model='self', decay_step_size=True,
                  increase_lambda=True, projection='none', kappa=math.inf,
-                 include_image_as_activation=False, randomize=False):
+                 include_image_as_activation=False, randomize=False, path=None):
         """
         Perceptual attack using a Lagrangian relaxation of the
         LPIPS-constrainted optimization problem.
@@ -90,8 +90,10 @@ class FastLagrangePerceptualAttack(nn.Module):
         self.h = h
         self.decay_step_size = decay_step_size
         self.increase_lambda = increase_lambda
-
-        self.lpips_model = get_lpips_model(lpips_model, model)
+        if lpips_model != 'r-lpips':
+            self.lpips_model = get_lpips_model(lpips_model, model)
+        else:
+            self.lpips_model = OriginalLPIPSDistance(path=path)
         self.lpips_distance = LPIPSDistance(
             self.lpips_model,
             include_image_as_activation=include_image_as_activation,
@@ -288,7 +290,7 @@ class FirstOrderStepPerceptualAttack(nn.Module):
     def __init__(self, model, bound=0.5, num_iterations=5,
                  h=1e-3, kappa=1, lpips_model='self',
                  targeted=False, randomize=False,
-                 include_image_as_activation=False):
+                 include_image_as_activation=False, path=None):
         """
         Perceptual attack using conjugate gradient to solve the constrained
         optimization problem.
@@ -306,8 +308,10 @@ class FirstOrderStepPerceptualAttack(nn.Module):
         self.bound = bound
         self.num_iterations = num_iterations
         self.h = h
-
-        self.lpips_model = get_lpips_model(lpips_model, model)
+        if lpips_model != 'r-lpips':
+            self.lpips_model = get_lpips_model(lpips_model, model)
+        else:
+            self.lpips_model = OriginalLPIPSDistance(path=path)
         self.lpips_distance = LPIPSDistance(
             self.lpips_model,
             include_image_as_activation=include_image_as_activation,
@@ -421,7 +425,7 @@ class PerceptualPGDAttack(nn.Module):
                  decay_step_size=False, kappa=1,
                  projection='newtons', randomize=False,
                  random_targets=False, num_classes=None,
-                 include_image_as_activation=False):
+                 include_image_as_activation=False, path=None):
         """
         Iterated version of the conjugate gradient attack.
 
@@ -451,12 +455,15 @@ class PerceptualPGDAttack(nn.Module):
             else:
                 self.step = 2 * self.bound / self.num_iterations
 
-        self.lpips_model = get_lpips_model(lpips_model, model)
+        if lpips_model != 'r-lpips':
+            self.lpips_model = get_lpips_model(lpips_model, model)
+        else:
+            self.lpips_model = OriginalLPIPSDistance(path=path)
         self.first_order_step = FirstOrderStepPerceptualAttack(
             model, bound=self.step, num_iterations=cg_iterations, h=h,
             kappa=kappa, lpips_model=self.lpips_model,
             include_image_as_activation=include_image_as_activation,
-            targeted=self.random_targets)
+            targeted=self.random_targets, path=path)
         self.projection = PROJECTIONS[projection](self.bound, self.lpips_model)
 
     def _attack(self, inputs, labels):
@@ -501,7 +508,7 @@ class LagrangePerceptualAttack(nn.Module):
                  projection='newtons', decay_step_size=True,
                  num_classes=None,
                  include_image_as_activation=False,
-                 randomize=False, random_targets=False):
+                 randomize=False, random_targets=False, path=None):
         """
         Perceptual attack using a Lagrangian relaxation of the
         LPIPS-constrainted optimization problem.
@@ -533,8 +540,10 @@ class LagrangePerceptualAttack(nn.Module):
         self.h = h
         self.random_targets = random_targets
         self.num_classes = num_classes
-
-        self.lpips_model = get_lpips_model(lpips_model, model)
+        if lpips_model != 'r-lpips':
+            self.lpips_model = get_lpips_model(lpips_model, model)
+        else:
+            self.lpips_model = OriginalLPIPSDistance(path=path)
         self.lpips_distance = LPIPSDistance(
             self.lpips_model,
             include_image_as_activation=include_image_as_activation,
