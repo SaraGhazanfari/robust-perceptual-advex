@@ -75,17 +75,6 @@ The following command was used to evaluate ImageNet-100 classifiers for Table 3 
     "PerceptualPGDAttack(model, bound=0.5, lpips_model='alexnet', num_iterations=40, lpips_model='r-lpips', path='path/to/r-lpips/model')" \
     "LagrangePerceptualAttack(model, bound=0.5, lpips_model='alexnet', num_iterations=40, lpips_model='r-lpips', path='path/to/r-lpips/model')"
 
-## Citation
-
-If you find this repository useful for your research, please cite our paper as follows:
-
-    @inproceedings{laidlaw2021perceptual,
-      title={Perceptual Adversarial Robustness: Defense Against Unseen Threat Models},
-      author={Laidlaw, Cassidy and Singla, Sahil and Feizi, Soheil},
-      booktitle={ICLR},
-      year={2021}
-    }
-
 ## Contact
 
-For questions about the paper or code, please contact claidlaw@umd.edu.
+For questions about the code, please contact sg7457@nyu.edu.
