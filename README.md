@@ -76,8 +76,8 @@ The following command was used to evaluate ImageNet-100 classifiers for Table 3 
     "ReColorAdvAttack(model, bound=0.06, num_iterations=200)" \
     "PerceptualPGDAttack(model, bound=0.5, lpips_model='alexnet', num_iterations=40)" \
     "LagrangePerceptualAttack(model, bound=0.5, lpips_model='alexnet', num_iterations=40)"\
-    "PerceptualPGDAttack(model, bound=0.5, lpips_model='alexnet', num_iterations=40, lpips_model='r-lpips', path='path/to/r-lpips/model')" \
-    "LagrangePerceptualAttack(model, bound=0.5, lpips_model='alexnet', num_iterations=40, lpips_model='r-lpips', path='path/to/r-lpips/model')"
+    "PerceptualPGDAttack(model, bound=0.5, lpips_model='r-lpips', num_iterations=40, path='path/to/r-lpips/model')" \
+    "LagrangePerceptualAttack(model, bound=0.5, lpips_model='r-lpips', num_iterations=40, path='path/to/r-lpips/model')"
 
 ## Contact
 
