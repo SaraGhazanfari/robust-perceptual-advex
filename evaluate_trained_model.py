@@ -1,13 +1,12 @@
-
 from typing import Dict, List
-import torch
+
 import csv
 import argparse
-from static_vars import StaticVars
+
+from perceptual_advex.imagenet_dataset import get_dataset
 from perceptual_advex.utilities import add_dataset_model_arguments, \
     get_dataset_model
 from perceptual_advex.attacks import *
-
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
@@ -28,8 +27,9 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    dataset, model = get_dataset_model(args)
-    _, val_loader = dataset.make_loaders(1, args.batch_size, only_val=True)
+    dataset, val_loader = get_dataset(batch_size=args.batch_size, num_workers=1, data_path=args.dataset_path,
+                                      split='val')
+    _, model = get_dataset_model(args)
 
     model.eval()
     model.to(StaticVars.DEVICE)
@@ -50,8 +50,8 @@ if __name__ == '__main__':
         print(f'BATCH {batch_index:05d}')
 
         if (
-            args.num_batches is not None and
-            batch_index >= args.num_batches
+                args.num_batches is not None and
+                batch_index >= args.num_batches
         ):
             break
 
