@@ -8,6 +8,7 @@ import numpy as np
 import itertools
 from torchvision.utils import save_image
 from perceptual_advex.attacks import *
+from perceptual_advex.imagenet_dataset import get_dataset
 from perceptual_advex.utilities import add_dataset_model_arguments, \
     get_dataset_model
 
@@ -33,19 +34,19 @@ if __name__ == '__main__':
 
     parser.add_argument('--batch_size', type=int, default=16,
                         help='number of examples to generate '
-                        'adversarial examples for')
+                             'adversarial examples for')
     parser.add_argument('--batch_index', type=int, default=0,
                         help='batch index to generate adversarial examples '
-                        'for')
+                             'for')
     parser.add_argument('--shuffle', default=False, action='store_true',
                         help="Shuffle dataset before choosing a batch")
     parser.add_argument('--layout', type=str, default='vertical',
                         help='lay out the same images on the same row '
-                        '(horizontal) or column (vertical)')
+                             '(horizontal) or column (vertical)')
     parser.add_argument('--only_successful', action='store_true',
                         default=False,
                         help='only show images where adversarial example '
-                        'was generated for all attacks')
+                             'was generated for all attacks')
     parser.add_argument('--output', type=str,
                         help='output PNG file')
     parser.add_argument('--random_seed', type=int, default=None,
@@ -56,9 +57,9 @@ if __name__ == '__main__':
     if args.random_seed is not None:
         torch.manual_seed(args.random_seed)
 
-    dataset, model = get_dataset_model(args)
-    _, val_loader = dataset.make_loaders(1, args.batch_size, only_val=True,
-                                         shuffle_val=args.shuffle)
+    _, model = get_dataset_model(args)
+    _, val_loader = get_dataset(batch_size=args.batch_size, num_workers=1, data_path=args.dataset_path,
+                                has_normalize=False)
     model.eval()
 
     inputs, labels = next(itertools.islice(
@@ -102,7 +103,7 @@ if __name__ == '__main__':
             all_labels[attack_index] = adv_labels.cpu().detach().numpy()
 
             all_successful[(adv_labels == orig_labels).cpu().detach().numpy()
-                           .astype(bool)] = False
+            .astype(bool)] = False
             # mark examples that changed by less than 1/1000 as not successful
             all_successful[np.all(np.abs(diff) < 1e-3,
                                   axis=(1, 2, 3))] = False

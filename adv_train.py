@@ -156,12 +156,10 @@ if __name__ == '__main__':
     iteration = 0
     log_dir = os.path.join(args.log_dir, experiment_path)
     if os.path.exists(log_dir):
-        print(f'The log directory {log_dir} exists, delete? (y/N) ', end='')
-        if not vars(args)['continue'] and input().strip() == 'y':
-            shutil.rmtree(log_dir)
-            # sleep necessary to prevent weird bug where directory isn't
-            # actually deleted
-            time.sleep(5)
+        shutil.rmtree(log_dir)
+        # sleep necessary to prevent weird bug where directory isn't
+        # actually deleted
+        time.sleep(5)
     writer = SummaryWriter(log_dir)
 
     # optimizer
@@ -199,19 +197,17 @@ if __name__ == '__main__':
             latest_checkpoint_epoch = epoch
             latest_checkpoint_fname = checkpoint_fname
     if latest_checkpoint_fname is not None:
-        print(f'Load checkpoint {latest_checkpoint_fname}? (Y/n) ', end='')
-        if vars(args)['continue'] or input().strip() != 'n':
-            state = torch.load(latest_checkpoint_fname)
-            if 'iteration' in state:
-                iteration = state['iteration']
-            if isinstance(model, FeatureModel):
-                model.model.load_state_dict(state['model'])
-            else:
-                model.load_state_dict(state['model'])
-            if 'optimizer' in state:
-                optimizer.load_state_dict(state['optimizer'])
-            start_epoch = latest_checkpoint_epoch + 1
-            adaptive_eps = state.get('adaptive_eps', {})
+        state = torch.load(latest_checkpoint_fname)
+        if 'iteration' in state:
+            iteration = state['iteration']
+        if isinstance(model, FeatureModel):
+            model.model.load_state_dict(state['model'])
+        else:
+            model.load_state_dict(state['model'])
+        if 'optimizer' in state:
+            optimizer.load_state_dict(state['optimizer'])
+        start_epoch = latest_checkpoint_epoch + 1
+        adaptive_eps = state.get('adaptive_eps', {})
 
     # parallelize
     if torch.cuda.is_available():
